@@ -1509,6 +1509,7 @@ en:
           actions:
             label_enable_all: "Enable all"
             label_disable_all: "Disable all"
+            label_toggle_template: "Toggle %{template}"
 
   versions:
     overview:
