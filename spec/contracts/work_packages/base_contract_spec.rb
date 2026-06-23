@@ -1184,6 +1184,202 @@ RSpec.describe WorkPackages::BaseContract do
     end
   end
 
+  describe "associated versions" do
+    subject(:contract) { described_class.new(work_package, current_user) }
+
+    let(:assignable_version) { build_stubbed(:version) }
+    let(:non_assignable_version) { build_stubbed(:version) }
+
+    before do
+      allow(work_package).to receive(:assignable_versions).and_return([assignable_version])
+    end
+
+    describe "permissions" do
+      context "when user has assign_versions permission" do
+        before do
+          work_package.target_version_ids_replacements = [assignable_version.id]
+          subject.validate
+        end
+
+        it "is valid" do
+          expect(subject.errors).to be_empty
+        end
+      end
+
+      context "when user lacks assign_versions permission" do
+        let(:permissions) do
+          %i(view_work_packages edit_work_packages)
+        end
+
+        it "is invalid for target version" do
+          work_package.target_version_ids_replacements = [assignable_version.id]
+          subject.validate
+          expect(subject.errors.symbols_for(:target_versions)).to include(:error_readonly)
+        end
+
+        it "is invalid for observed_in version" do
+          work_package.observed_in_version_ids_replacements = [assignable_version.id]
+          subject.validate
+          expect(subject.errors.symbols_for(:observed_in_versions)).to include(:error_readonly)
+        end
+      end
+
+      context "when neither is overridden" do
+        let(:permissions) do
+          %i(view_work_packages edit_work_packages)
+        end
+
+        before do
+          subject.validate
+        end
+
+        it "is valid (no permission error)" do
+          expect(subject.errors).to be_empty
+        end
+      end
+    end
+
+    describe "version_id writability under multiple_versions setting" do
+      let(:version) { assignable_version }
+
+      context "with multiple versions disabled",
+              with_settings: { work_package_multiple_versions: false } do
+        it "allows version_id changes" do
+          work_package.version = version
+          subject.validate
+          expect(subject.errors.symbols_for(:version_id)).not_to include(:error_readonly)
+        end
+      end
+
+      context "with multiple versions enabled",
+              with_settings: { work_package_multiple_versions: true } do
+        it "rejects version_id changes with error_readonly" do
+          work_package.version = version
+          subject.validate
+          expect(subject.errors.symbols_for(:version_id)).to include(:error_readonly)
+        end
+
+        it "still accepts target_version_ids changes" do
+          work_package.target_version_ids_replacements = [version.id]
+          subject.validate
+          expect(subject.errors.symbols_for(:target_versions)).to be_empty
+        end
+      end
+    end
+
+    describe "mutual exclusion of version_id and target_version_ids" do
+      context "when both version_id and target_version_ids changed" do
+        before do
+          allow(work_package).to receive(:version_id_changed?).and_return(true)
+          work_package.target_version_ids_replacements = [assignable_version.id]
+          subject.validate
+        end
+
+        it "is invalid" do
+          expect(subject.errors.symbols_for(:base)).to include(:version_and_target_versions_mutually_exclusive)
+        end
+      end
+
+      context "when both changed on a new record" do
+        before do
+          allow(work_package).to receive_messages(
+            new_record?: true,
+            version_id_changed?: true
+          )
+          work_package.target_version_ids_replacements = [assignable_version.id]
+          subject.validate
+        end
+
+        it "is valid" do
+          expect(subject.errors.symbols_for(:base)).not_to include(:version_and_target_versions_mutually_exclusive)
+        end
+      end
+
+      context "when only one type of version changed" do
+        it "is valid for version" do
+          work_package.version = assignable_version
+          subject.validate
+          expect(subject.errors).to be_empty
+        end
+
+        it "is valid for target_version" do
+          work_package.target_version_ids_replacements = [assignable_version.id]
+          subject.validate
+          expect(subject.errors).to be_empty
+        end
+      end
+    end
+
+    describe "target versions assignability" do
+      context "with assignable IDs" do
+        before do
+          work_package.target_version_ids_replacements = [assignable_version.id]
+          subject.validate
+        end
+
+        it "is valid" do
+          expect(subject.errors.symbols_for(:target_versions)).to be_empty
+        end
+      end
+
+      context "with non-assignable IDs" do
+        before do
+          work_package.target_version_ids_replacements = [non_assignable_version.id]
+          subject.validate
+        end
+
+        it "is invalid" do
+          expect(subject.errors.symbols_for(:target_versions)).to include(:inclusion)
+        end
+      end
+
+      context "with empty array" do
+        before do
+          work_package.target_version_ids_replacements = []
+          subject.validate
+        end
+
+        it "is valid" do
+          expect(subject.errors.symbols_for(:target_versions)).to be_empty
+        end
+      end
+
+      context "when not overridden (nil)" do
+        before do
+          subject.validate
+        end
+
+        it "is valid" do
+          expect(subject.errors.symbols_for(:target_versions)).to be_empty
+        end
+      end
+    end
+
+    describe "observed_in versions assignability" do
+      context "with assignable IDs" do
+        before do
+          work_package.observed_in_version_ids_replacements = [assignable_version.id]
+          subject.validate
+        end
+
+        it "is valid" do
+          expect(subject.errors.symbols_for(:observed_in_versions)).to be_empty
+        end
+      end
+
+      context "with non-assignable IDs" do
+        before do
+          work_package.observed_in_version_ids_replacements = [non_assignable_version.id]
+          subject.validate
+        end
+
+        it "is invalid" do
+          expect(subject.errors.symbols_for(:observed_in_versions)).to include(:inclusion)
+        end
+      end
+    end
+  end
+
   describe "parent" do
     let(:parent) { build_stubbed(:work_package) }
 

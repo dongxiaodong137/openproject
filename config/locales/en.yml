@@ -2163,7 +2163,11 @@ en:
         time_entries: "Log time"
         type: "Type"
         version: "Version"
+        target_versions: "Target versions"
+        observed_in_versions: "Observed in versions"
         watcher: "Watcher"
+      work_package_associated_version:
+        kind: "Kind"
       ordered_persisted_query_entity:
         persisted_query: "Persisted query"
         entity: "Entity"
@@ -2568,6 +2572,7 @@ en:
               must_be_empty_when_work_is_empty_and_percent_complete_is_100p: >-
                 must be empty when Work is empty and % Complete is 100%.
           readonly_status: "The work package is in a readonly status so its attributes cannot be changed."
+          version_and_target_versions_mutually_exclusive: "Version and target versions cannot both be changed at the same time."
         type:
           attributes:
             attribute_groups:
@@ -5459,6 +5464,10 @@ en:
     (for example, if a day is 8 hours, 32 hours would be 4 days).
   setting_invitation_expiration_days: "Activation email expires after"
   setting_invitation_expiration_days_caption: "Number of days after which the activation email expires."
+  setting_work_package_multiple_versions: "Multiple versions per work package"
+  setting_work_package_multiple_versions_caption: >-
+    Warning: once enabled, disabling this setting can cause version assignments from work packages to be lost.
+    This action cannot be undone.
   setting_work_package_done_ratio: "Progress calculation mode"
   setting_work_package_done_ratio_field: "Work-based"
   setting_work_package_done_ratio_field_caption_html: >-

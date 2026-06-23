@@ -1344,6 +1344,11 @@ module Settings
         default: "field",
         allowed: %w[field status]
       },
+      work_package_multiple_versions: {
+        description: "Enable multiple version assignments on work packages.",
+        format: :boolean,
+        default: false
+      },
       work_packages_projects_export_limit: {
         default: 500
       },
