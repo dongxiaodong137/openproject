@@ -117,7 +117,6 @@ en:
       endpoint_url: Endpoint URL
     providers:
       label_providers: "Providers"
-      seeded_from_env: "This provider was seeded from the environment configuration. It cannot be edited."
       google:
         name: Google
       microsoft_entra:
