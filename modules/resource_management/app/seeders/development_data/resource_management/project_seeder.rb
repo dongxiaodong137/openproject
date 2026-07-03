@@ -84,16 +84,11 @@ module DevelopmentData
       end
 
       def applicable?
-        OpenProject::FeatureDecisions.resource_management_active? &&
-          Project.where(identifier: PROJECT_IDENTIFIER).none?
+        Project.where(identifier: PROJECT_IDENTIFIER).none?
       end
 
       def not_applicable_message
-        if OpenProject::FeatureDecisions.resource_management_active?
-          "Not seeding #{PROJECT_IDENTIFIER}: it already exists."
-        else
-          "Not seeding #{PROJECT_IDENTIFIER}: resource_management feature is not active."
-        end
+        "Not seeding #{PROJECT_IDENTIFIER}: it already exists."
       end
 
       private
