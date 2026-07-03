@@ -163,6 +163,7 @@ en:
     description_select_work_package: "Select work package #%{id}"
     description_subwork_package: "Child of work package #%{id}"
     editor:
+      error_paste_failed: "The pasted content could not be inserted with formatting and was added as plain text instead."
       revisions: "Show local modifications"
       no_revisions: "No local modifications found"
       preview: "Toggle preview mode"
