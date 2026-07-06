@@ -44,6 +44,8 @@ module Admin
         )
 
         sf.check_box_group(name: :available_languages, values: available_languages)
+
+        sf.check_box(name: :crowdin_in_context_translations)
       end
 
       private
