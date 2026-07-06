@@ -37,13 +37,14 @@ import { debugLog } from 'core-app/shared/helpers/debug_output';
 import { flipMove } from 'core-stimulus/helpers/flip-helper';
 import { parseTemplate } from 'url-template';
 import {
+  buildAbsolutePositionFormData,
   buildMoveFormData,
   isSortableItemData,
   resolveDropIntent,
   type RootAwareChild,
-  type SortableListData,
   type SortableListsRoot,
 } from './sortable-lists/drag-and-drop';
+import { resolveItemPosition } from './sortable-lists/list-dom';
 import {
   captureRowPositions,
   reorderRows,
@@ -67,8 +68,10 @@ export default class SortableListsController extends Controller<HTMLElement> imp
   static values = {
     acceptedType: String,
     moveUrlTemplate: String,
+    moveUrlTemplates: Object,
     allowedAxis: { type: String, default: 'vertical' },
     maxScrollSpeed: { type: String, default: 'standard' },
+    positionMode: { type: String, default: 'relative' },
   };
 
   declare readonly scrollableTargets:HTMLElement[];
@@ -79,8 +82,11 @@ export default class SortableListsController extends Controller<HTMLElement> imp
   declare readonly hasAcceptedTypeValue:boolean;
   declare readonly moveUrlTemplateValue:string;
   declare readonly hasMoveUrlTemplateValue:boolean;
+  declare readonly moveUrlTemplatesValue:Record<string, string>;
+  declare readonly hasMoveUrlTemplatesValue:boolean;
   declare readonly allowedAxisValue:string;
   declare readonly maxScrollSpeedValue:string;
+  declare readonly positionModeValue:string;
 
   private monitorCleanupFn?:CleanupFn;
   private scrollableCleanupFns = new Map<HTMLElement, CleanupFn>();
@@ -193,11 +199,19 @@ export default class SortableListsController extends Controller<HTMLElement> imp
     const rollback = captureRowPositions(rows);
     reorderRows({ rows, list: intent.listElement, previousItemId: intent.previousItemId });
 
-    const result = await this.moveItem({
-      listData: intent.listData,
-      previousItemId: intent.previousItemId,
-      moveUrl,
-    });
+    const body = this.positionModeValue === 'absolute'
+      ? buildAbsolutePositionFormData({
+        listId: intent.listData.listId,
+        position: resolveItemPosition({ list: intent.listElement, itemId: source.data.itemId }),
+        type: intent.listData.type,
+      })
+      : buildMoveFormData({
+        listId: intent.listData.listId,
+        previousItemId: intent.previousItemId,
+        type: intent.listData.type,
+      });
+
+    const result = await this.moveItem({ body, moveUrl });
 
     if (!result.ok) {
       try {
@@ -212,14 +226,17 @@ export default class SortableListsController extends Controller<HTMLElement> imp
     }
   }
 
-  private resolveMoveUrl(data:{ itemId:string }):string|null {
-    if (this.hasMoveUrlTemplateValue) {
-      return this.withCurrentFrameQuery(
-        parseTemplate(this.moveUrlTemplateValue).expand({ id: data.itemId }),
-      );
+  private resolveMoveUrl(data:{ type:string; itemId:string }):string|null {
+    const template = this.moveUrlTemplateForType(data.type);
+    return template ? parseTemplate(template).expand({ id: data.itemId }) : null;
+  }
+
+  private moveUrlTemplateForType(type:string):string|null {
+    if (this.hasMoveUrlTemplatesValue && type in this.moveUrlTemplatesValue) {
+      return this.moveUrlTemplatesValue[type];
     }
 
-    return null;
+    return this.hasMoveUrlTemplateValue ? this.moveUrlTemplateValue : null;
   }
 
   private withCurrentFrameQuery(moveUrl:string):string {
@@ -244,23 +261,17 @@ export default class SortableListsController extends Controller<HTMLElement> imp
   }
 
   private async moveItem({
-    listData,
-    previousItemId,
+    body,
     moveUrl,
   }:{
-    listData:SortableListData;
-    previousItemId:string|null;
+    body:FormData;
     moveUrl:string;
   }):Promise<MoveResult> {
     const request = new FetchRequest(
       'put',
       moveUrl,
       {
-        body: buildMoveFormData({
-          listId: listData.listId,
-          previousItemId,
-          type: listData.type,
-        }),
+        body,
         responseKind: 'turbo-stream',
       },
     );

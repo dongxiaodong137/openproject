@@ -144,6 +144,26 @@ export function buildMoveFormData({
   return data;
 }
 
+export function buildAbsolutePositionFormData({
+  listId,
+  position,
+  type,
+}:{
+  listId:string|null;
+  position:number;
+  type:string;
+}):FormData {
+  const data = new FormData();
+
+  data.append('list_type', type);
+  if (listId !== null) {
+    data.append('target_id', listId);
+  }
+  data.append('position', String(position));
+
+  return data;
+}
+
 export function acceptsSortableItemType({
   acceptedType,
   type,
@@ -155,18 +175,15 @@ export function acceptsSortableItemType({
 }
 
 // The drop rule shared by list and item drop targets: the payload must be a
-// sortable item belonging to this same root and of an accepted type. Item
-// targets additionally exclude themselves before calling this.
-export function canAccept(root:SortableListsRoot, data:Record<string|symbol, unknown>):boolean {
+// sortable item belonging to this same root. Type filtering is handled by each
+// list leaf (via acceptedTypes) or item leaf (via typeValue). Item targets
+// additionally exclude themselves before calling this.
+export function canAccept(root:SortableListsRoot, data:Record<string|symbol, unknown>):data is SortableItemData {
   if (!isSortableItemData(data)) {
     return false;
   }
 
-  if (data.rootElement == null || data.rootElement !== root.element) {
-    return false;
-  }
-
-  return acceptsSortableItemType({ acceptedType: root.acceptedType, type: data.type });
+  return data.rootElement != null && data.rootElement === root.element;
 }
 
 export function isSourceListTarget({

@@ -593,6 +593,166 @@ describe('Sortable lists controller', () => {
     expect(scrollableCleanup).toHaveBeenCalledOnce();
   });
 
+  it('resolves the move URL per item type from the templates map', async () => {
+    const templatesJson = JSON.stringify({ section: '/sections/{id}/drop', custom_field: '/fields/{id}/drop' });
+    fixture.innerHTML = `
+      <div
+        id="sortable-root"
+        data-controller="sortable-lists"
+        data-sortable-lists-move-url-templates-value='${templatesJson}'
+        data-sortable-lists-sortable-lists--list-outlet="#sortable-root [data-controller~='sortable-lists--list']"
+        data-sortable-lists-sortable-lists--item-outlet="#sortable-root [data-controller~='sortable-lists--item']"
+      >
+        <ul data-controller="sortable-lists--list" data-sortable-lists--list-type-value="section" data-sortable-lists--list-id-value="10">
+          <li data-controller="sortable-lists--item" data-sortable-lists--item-id-value="3" data-sortable-lists--item-type-value="section"></li>
+          <li data-controller="sortable-lists--item" data-sortable-lists--item-id-value="4" data-sortable-lists--item-type-value="section"></li>
+        </ul>
+        <ul data-controller="sortable-lists--list" data-sortable-lists--list-type-value="custom_field" data-sortable-lists--list-id-value="20">
+          <li data-controller="sortable-lists--item" data-sortable-lists--item-id-value="42" data-sortable-lists--item-type-value="custom_field"></li>
+          <li data-controller="sortable-lists--item" data-sortable-lists--item-id-value="43" data-sortable-lists--item-type-value="custom_field"></li>
+        </ul>
+      </div>
+    `;
+
+    await ctx.nextFrame();
+
+    const monitorOptions = vi.mocked(monitorForElements).mock.lastCall?.[0];
+    const root = fixture.querySelector<HTMLElement>('#sortable-root')!;
+    // Drop each item into the opposite list to avoid same-list no-op.
+    const sectionList = fixture.querySelector<HTMLElement>('[data-sortable-lists--list-id-value="10"]')!;
+    const customFieldList = fixture.querySelector<HTMLElement>('[data-sortable-lists--list-id-value="20"]')!;
+    const sectionItem = fixture.querySelector<HTMLElement>('[data-sortable-lists--item-id-value="3"]')!;
+    const customFieldItem = fixture.querySelector<HTMLElement>('[data-sortable-lists--item-id-value="42"]')!;
+
+    // Drop custom_field item into section list (different list → not a same-list no-op).
+    await monitorOptions?.onDrop?.({
+      source: sourcePayload(customFieldItem, sortableItemData({ itemId: '42', type: 'custom_field', rootElement: root })),
+      location: {
+        initial: { dropTargets: [], input: input() },
+        current: {
+          dropTargets: [
+            dropTargetRecord(sectionList, sortableListData({ type: 'section', listId: '10' })),
+          ],
+          input: input(),
+        },
+        previous: { dropTargets: [] },
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('/fields/42/drop', expect.objectContaining({ method: 'PUT' }));
+
+    // Wait for the first move to fully settle so the moving flag is cleared.
+    await flushPromises();
+
+    // Drop section item into custom_field list (different list → not a same-list no-op).
+    await monitorOptions?.onDrop?.({
+      source: sourcePayload(sectionItem, sortableItemData({ itemId: '3', type: 'section', rootElement: root })),
+      location: {
+        initial: { dropTargets: [], input: input() },
+        current: {
+          dropTargets: [
+            dropTargetRecord(customFieldList, sortableListData({ type: 'custom_field', listId: '20' })),
+          ],
+          input: input(),
+        },
+        previous: { dropTargets: [] },
+      },
+    });
+
+    expect(fetchMock).toHaveBeenLastCalledWith('/sections/3/drop', expect.objectContaining({ method: 'PUT' }));
+  });
+
+  it('falls back to moveUrlTemplate when type has no entry in the templates map', async () => {
+    const { targetList, firstSourceItem } = renderFixture({
+      moveUrlTemplate: '/move/{id}',
+    });
+
+    await ctx.nextFrame();
+    await dropCurrentItemOnList(firstSourceItem, targetList);
+
+    expect(fetchMock).toHaveBeenCalledWith('/move/1', expect.objectContaining({ method: 'PUT' }));
+  });
+
+  function renderAbsoluteFixture() {
+    fixture.innerHTML = `
+      <div
+        id="sortable-root"
+        data-controller="sortable-lists"
+        data-sortable-lists-position-mode-value="absolute"
+        data-sortable-lists-move-url-templates-value='{"custom_field":"/fields/{id}/drop"}'
+        data-sortable-lists-sortable-lists--list-outlet="#sortable-root [data-controller~='sortable-lists--list']"
+        data-sortable-lists-sortable-lists--item-outlet="#sortable-root [data-controller~='sortable-lists--item']"
+      >
+        <ul
+          data-controller="sortable-lists--list"
+          data-sortable-lists--list-type-value="custom_field"
+          data-sortable-lists--list-id-value="5"
+        >
+          <li data-controller="sortable-lists--item" data-sortable-lists--item-id-value="10" data-sortable-lists--item-type-value="custom_field"></li>
+        </ul>
+        <ul
+          data-controller="sortable-lists--list"
+          data-sortable-lists--list-type-value="custom_field"
+          data-sortable-lists--list-id-value="5"
+        >
+          <li data-controller="sortable-lists--item" data-sortable-lists--item-id-value="20" data-sortable-lists--item-type-value="custom_field"></li>
+          <li data-controller="sortable-lists--item" data-sortable-lists--item-id-value="30" data-sortable-lists--item-type-value="custom_field"></li>
+        </ul>
+      </div>
+    `;
+    const root = fixture.querySelector<HTMLElement>('#sortable-root')!;
+    const [sourceList, targetList] = Array.from(fixture.querySelectorAll<HTMLElement>('[data-controller~="sortable-lists--list"]'));
+    const sourceItem = fixture.querySelector<HTMLElement>('[data-sortable-lists--item-id-value="10"]')!;
+    return {
+      root, sourceList, targetList, sourceItem,
+    };
+  }
+
+  it('posts target_id and position (no prev_id) when positionMode is absolute', async () => {
+    const {
+      root, targetList, sourceItem,
+    } = renderAbsoluteFixture();
+
+    await ctx.nextFrame();
+
+    const monitorOptions = vi.mocked(monitorForElements).mock.lastCall?.[0];
+
+    // Drop item 10 from sourceList onto targetList (different list → not a no-op).
+    // The item appends to end of targetList (position 3 among 3 items after move).
+    await monitorOptions?.onDrop?.({
+      source: sourcePayload(sourceItem, sortableItemData({ itemId: '10', type: 'custom_field', rootElement: root })),
+      location: {
+        initial: { dropTargets: [], input: input() },
+        current: {
+          dropTargets: [
+            dropTargetRecord(targetList, sortableListData({ type: 'custom_field', listId: '5' })),
+          ],
+          input: input(),
+        },
+        previous: { dropTargets: [] },
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const options = fetchMock.mock.lastCall?.[1] as { body:FormData };
+    expect(options.body.get('target_id')).toBe('5');
+    expect(typeof Number(options.body.get('position'))).toBe('number');
+    expect(Number(options.body.get('position'))).toBeGreaterThan(0);
+    expect(options.body.get('prev_id')).toBeNull();
+  });
+
+  it('posts prev_id (no position) in the default relative mode', async () => {
+    const { targetList, firstSourceItem } = renderFixture();
+
+    await ctx.nextFrame();
+    await dropCurrentItemOnList(firstSourceItem, targetList);
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const options = fetchMock.mock.lastCall?.[1] as { body:FormData };
+    expect(options.body.get('prev_id')).not.toBeNull();
+    expect(options.body.get('position')).toBeNull();
+  });
+
   it('hands the root reference to connected list and item controllers', async () => {
     const { root, sourceList, firstSourceItem } = renderFixture({ acceptedType: 'work_package' });
     await ctx.nextFrame();

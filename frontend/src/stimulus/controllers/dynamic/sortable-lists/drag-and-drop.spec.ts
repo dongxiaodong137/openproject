@@ -32,16 +32,25 @@ import { attachClosestEdge } from '@atlaskit/pragmatic-drag-and-drop-hitbox/clos
 import { type DragLocationHistory } from '@atlaskit/pragmatic-drag-and-drop/types';
 import {
   acceptsSortableItemType,
+  buildAbsolutePositionFormData,
   buildMoveFormData,
+  canAccept,
   isSortableItemData,
   isSortableListData,
   resolveDropIntent,
   resolvePreviousSortableItemId,
   sortableItemData,
   sortableListData,
+  type SortableListsRoot,
 } from './drag-and-drop';
 
 describe('sortable lists drag and drop helpers', () => {
+  let rootEl:HTMLElement;
+
+  beforeEach(() => {
+    rootEl = document.createElement('div');
+  });
+
   function itemRow(id:string):HTMLLIElement {
     const row = document.createElement('li');
     const item = document.createElement('article');
@@ -160,6 +169,20 @@ describe('sortable lists drag and drop helpers', () => {
     });
   });
 
+  describe('canAccept', () => {
+    it('canAccept returns true for any sortable item belonging to the root, regardless of type', () => {
+      const root = { element: rootEl, moving: false, acceptedType: 'work_package' } as SortableListsRoot;
+      const data = sortableItemData({ type: 'anything', itemId: '7', rootElement: rootEl });
+      expect(canAccept(root, data)).toBe(true);
+    });
+
+    it('canAccept returns false for items from another root', () => {
+      const root = { element: rootEl, moving: false, acceptedType: null } as SortableListsRoot;
+      const data = sortableItemData({ type: 'x', itemId: '7', rootElement: document.createElement('div') });
+      expect(canAccept(root, data)).toBe(false);
+    });
+  });
+
   describe('buildMoveFormData', () => {
     it('serializes list data and previous item id for the move endpoint', () => {
       const data = buildMoveFormData({ type: 'backlog_bucket', listId: '7', previousItemId: '12' });
@@ -175,6 +198,22 @@ describe('sortable lists drag and drop helpers', () => {
       expect(data.get('list_type')).toEqual('inbox');
       expect(data.get('list_id')).toEqual('');
       expect(data.get('prev_id')).toEqual('');
+    });
+  });
+
+  describe('buildAbsolutePositionFormData', () => {
+    it('builds absolute-position form data with target_id and position', () => {
+      const data = buildAbsolutePositionFormData({ listId: '5', position: 2, type: 'custom_field' });
+      expect(data.get('list_type')).toBe('custom_field');
+      expect(data.get('target_id')).toBe('5');
+      expect(data.get('position')).toBe('2');
+      expect(data.get('prev_id')).toBeNull();
+    });
+
+    it('omits target_id when listId is null', () => {
+      const data = buildAbsolutePositionFormData({ listId: null, position: 1, type: 'section' });
+      expect(data.get('target_id')).toBeNull();
+      expect(data.get('position')).toBe('1');
     });
   });
 
