@@ -588,4 +588,27 @@ describe('Sortable lists controller', () => {
     expect(itemController.root).toBe(rootController);
     expect(scrollableController.root).toBe(rootController);
   });
+
+  it('moves an item down through the optimistic path', async () => {
+    const { root, sourceList, firstSourceItem } = renderFixture();
+    await ctx.nextFrame();
+
+    const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+    controller.moveInDirection(firstSourceItem, 'down');
+    await flushPromises();
+
+    // '1' started first; moving down puts it after '2'.
+    expect(itemIds(sourceList)).toEqual(['2', '1', '3']);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const body = fetchMock.mock.lastCall?.[1] as { body:FormData };
+    expect(body.body.get('prev_id')).toBe('2');
+  });
+
+  it('reports move position for gating', async () => {
+    const { root, firstSourceItem } = renderFixture();
+    await ctx.nextFrame();
+    const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+
+    expect(controller.itemMovePosition(firstSourceItem)).toEqual({ isFirst: true, isLast: false });
+  });
 });

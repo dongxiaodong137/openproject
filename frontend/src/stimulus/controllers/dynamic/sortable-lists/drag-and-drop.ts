@@ -38,6 +38,7 @@ import {
   resolvePreviousItemId,
   rowOf,
   sortableListSelector,
+  type MoveDirection,
 } from './list-dom';
 
 // The Pragmatic DnD payloads exchanged between the sortable-lists root and
@@ -72,6 +73,8 @@ export interface SortableListData extends Record<string|symbol, unknown> {
 export interface SortableListsRoot {
   readonly element:HTMLElement;
   readonly busy:boolean;
+  moveInDirection(itemElement:HTMLElement, direction:MoveDirection):void;
+  itemMovePosition(itemElement:HTMLElement):{ isFirst:boolean; isLast:boolean }|null;
 }
 
 // Implemented by the list and item controllers so the root can hand them its
