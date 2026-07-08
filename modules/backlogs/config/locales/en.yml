@@ -217,10 +217,8 @@ en:
       For example, statuses like Done, Resolved, or Won't Fix may all represent a closed work item in your process.
     stories:
       update_service:
-        ambiguous_target: "list_type and direction cannot both be present."
-        invalid_direction: "direction must be one of: higher, highest, lower, lowest."
         invalid_target_type: "list_type must be one of: backlog_bucket with a list_id, sprint with a list_id, or inbox without a list_id."
-        missing_target: "list_type or direction must be present."
+        missing_target: "list_type or list_id must be present."
 
     story_points:
       one: "%{count} story point"
