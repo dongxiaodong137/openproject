@@ -30,23 +30,36 @@
 
 module Wikis
   module ProjectSettings
-    class WikiController < ApplicationController
+    class WikiController < Projects::SettingsController
       include OpTurbo::ComponentStream
       include OpTurbo::FlashStreamHelper
 
       menu_item :settings_project_wiki
 
-      before_action :authorize
-      before_action :find_project_by_project_id
-
-      def show; end
+      before_action :find_project_wiki
 
       def create
-        component = ProjectInternalWikiComponent.new(@project)
-        replace_via_turbo_stream(component:)
-        render_success_flash_message_via_turbo_stream(message: "Failed successfully")
+        Wiki.find_by(project: @project)
+
+        create_or_update_wiki
+        replace_via_turbo_stream(component: ProjectInternalWikiComponent.new(@project.reload))
+        render_success_flash_message_via_turbo_stream(message: "Internal wiki disenabled for this project.")
 
         respond_with_turbo_streams
+      end
+
+      private
+
+      def find_project_wiki
+        @wiki = Wiki.find_by(project: @project)
+      end
+
+      def create_or_update_wiki
+        if find_project_wiki
+          @wiki.toggle!(:enabled)
+        else
+          Wiki.create!(project: @project, start_page: "Wiki")
+        end
       end
     end
   end
