@@ -34,7 +34,7 @@ RSpec.describe Backlogs::Sprints::StartService do
   shared_let(:type_task) { create(:type_task) }
   shared_let(:status1) { create(:status) }
   shared_let(:status2) { create(:status) }
-  shared_let(:project) { create(:project, types: [type_task]) }
+  let(:project) { create(:project, types: [type_task]) }
   let(:status) { "in_planning" }
   let(:sprint) { create(:sprint, project:, status:) }
   let(:user) { create(:admin) }
@@ -126,21 +126,20 @@ RSpec.describe Backlogs::Sprints::StartService do
       expect(sprint.reload).to be_in_planning
       expect(sprint.task_board_for(project)).to be_nil
     end
-  end
 
-  context "when the database unique constraint rejects sprint activation" do
-    before do
-      allow(sprint)
-        .to receive(:active!)
-        .and_raise(ActiveRecord::RecordNotUnique)
-    end
+    context "and the project allows multiple active sprints" do
+      let(:project) do
+        create(:project, types: [type_task],
+                         sprint_sharing: "no_sharing",
+                         allow_multiple_active_sprints: true)
+      end
 
-    it "returns failure with the active sprint error", :aggregate_failures do
-      expect(result).not_to be_success
-      expect(result.errors[:status]).to include("only one active sprint is allowed per project.")
-      expect(result.message).to be_present
-      expect(sprint.reload).to be_in_planning
-      expect(sprint.task_board_for(project)).to be_nil
+      it "creates a board for the sprint project", :aggregate_failures do
+        expect { result }.to change(Boards::Grid, :count).by(1)
+        expect(result).to be_success
+        expect(sprint.reload).to be_active
+        expect(sprint.task_board_for(project)).to be_present
+      end
     end
   end
 
