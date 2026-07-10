@@ -30,13 +30,14 @@
 
 module Wikis
   class SubHeaderComponent < ApplicationComponent
+    alias_method :query, :model
+
     def initialize(query:)
-      super(nil)
-      @query = query
+      super(query)
     end
 
     def filter_input_value
-      @query.find_active_filter(:name)&.values&.first
+      query.find_active_filter(:name)&.values&.first
     end
 
     def sub_header_data_attributes

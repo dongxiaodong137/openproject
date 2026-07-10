@@ -84,5 +84,9 @@ Rails.application.routes.draw do
     post :create_and_link
   end
 
-  resources :wikis, only: [:index], controller: "wikis/wikis"
+  resources :wikis, only: [:index], controller: "wikis/wikis" do
+    collection do
+      get :menu, to: "wikis/menus#show"
+    end
+  end
 end

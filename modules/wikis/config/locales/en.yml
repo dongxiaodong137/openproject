@@ -211,10 +211,12 @@ en:
       menu_title: Wiki
       no_results_description: No wiki pages are available.
       no_results_title: No wiki pages yet
+      queries:
+        all: All wiki pages
+        main: Main wiki pages
       sub_pages_count:
         one: 1 sub-page
         other: "%{count} sub-pages"
-      title: Main wiki pages
 
     work_package_wikis_tab_component:
       inline_page_links: Mentioned in description

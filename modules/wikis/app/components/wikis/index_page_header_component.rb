@@ -29,49 +29,11 @@
 #++
 
 module Wikis
-  class WikiTableComponent < ::OpPrimer::BorderBoxTableComponent
-    columns :title, :project_name, :sub_pages_count, :last_edited
+  class IndexPageHeaderComponent < ApplicationComponent
+    alias_method :query, :model
 
-    mobile_columns :title, :project_name
-    mobile_labels :project_name
-
-    main_column :title
-
-    def sortable?
-      false
-    end
-
-    def has_actions?
-      false
-    end
-
-    def mobile_title
-      I18n.t("wikis.index.title")
-    end
-
-    def headers
-      [
-        [:title,           { caption: I18n.t("wikis.index.column_name") }],
-        [:project_name,    { caption: I18n.t("wikis.index.column_project") }],
-        [:sub_pages_count, { caption: I18n.t("wikis.index.column_sub_pages") }],
-        [:last_edited,     { caption: I18n.t("wikis.index.column_last_edited") }]
-      ]
-    end
-
-    def sub_pages_counts
-      @sub_pages_counts ||= WikiPage.where(parent_id: rows.map(&:id)).group(:parent_id).count
-    end
-
-    def blank_title
-      I18n.t("wikis.index.no_results_title")
-    end
-
-    def blank_description
-      I18n.t("wikis.index.no_results_description")
-    end
-
-    def blank_icon
-      :book
+    def initialize(query:)
+      super(query)
     end
   end
 end

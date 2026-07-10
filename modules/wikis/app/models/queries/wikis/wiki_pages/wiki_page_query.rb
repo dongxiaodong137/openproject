@@ -35,16 +35,41 @@ module Queries
         include BaseQuery
         include UnpersistedQuery
 
-        def self.model
-          ::WikiPage
+        MAIN = "main"
+        ALL = "all"
+        STATIC_QUERIES = [MAIN, ALL].freeze
+        DEFAULT_QUERY = MAIN
+
+        def self.normalized_query_id(value)
+          value = value.to_s
+          STATIC_QUERIES.include?(value) ? value : DEFAULT_QUERY
+        end
+
+        def self.static_queries
+          STATIC_QUERIES.map do |query_id|
+            new.tap { |query| query.query_id = query_id }
+          end
+        end
+
+        def query_id
+          @query_id || DEFAULT_QUERY
+        end
+
+        def query_id=(value)
+          @query_id = self.class.normalized_query_id(value)
+        end
+
+        def name
+          I18n.t("wikis.index.queries.#{query_id}")
         end
 
         def default_scope
-          ::WikiPage
-            .where(parent_id: nil)
-            .joins(wiki: :project)
-            .merge(::Project.allowed_to(::User.current, :view_wiki_pages))
-            .order(updated_at: :desc)
+          scope = ::WikiPage
+                    .joins(wiki: :project)
+                    .merge(::Project.allowed_to(::User.current, :view_wiki_pages))
+                    .order(updated_at: :desc)
+          scope = scope.where(parent_id: nil) if query_id == MAIN
+          scope
         end
       end
     end

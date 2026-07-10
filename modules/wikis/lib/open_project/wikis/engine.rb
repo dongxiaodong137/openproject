@@ -122,6 +122,13 @@ module OpenProject::Wikis
            icon: :book,
            if: should_render_wiki_index
 
+      menu :global_menu,
+           :wikis_query_select,
+           { controller: "/wikis/wikis", action: "index" },
+           parent: :wikis,
+           partial: "wikis/menus/menu",
+           if: should_render_wiki_index
+
       menu :work_package_split_view,
            :wikis,
            { tab: :wikis },

@@ -75,6 +75,12 @@ RSpec.describe Wikis::WikisController do
         expect(assigns(:pages)).not_to include(other_page)
       end
 
+      it "clamps an out-of-range page param to the last page" do
+        get :index, params: { page: "5" }
+        expect(response).to be_successful
+        expect(assigns(:pages)).to include(main_page)
+      end
+
       context "with a name filter" do
         it "returns only pages with a matching title" do
           get :index, params: { filters: [{ name: { operator: "~", values: ["handbook"] } }].to_json }
@@ -98,6 +104,38 @@ RSpec.describe Wikis::WikisController do
               params: { filters: [{ project_name: { operator: "~", values: ["nonexistent_project_xyz"] } }].to_json }
           expect(assigns(:pages)).to be_empty
         end
+      end
+    end
+  end
+
+  describe "GET #index with query_id=all" do
+    before { login_as user }
+
+    it "renders successfully" do
+      get :index, params: { query_id: "all" }
+      expect(response).to be_successful
+      expect(response).to render_template :index
+    end
+
+    it "includes main pages and sub-pages of projects the user can access" do
+      get :index, params: { query_id: "all" }
+      expect(assigns(:pages)).to contain_exactly(main_page, sub_page)
+    end
+
+    it "excludes pages from projects the user cannot access" do
+      get :index, params: { query_id: "all" }
+      expect(assigns(:pages)).not_to include(other_page)
+    end
+
+    it "falls back to main pages for unknown query_id values" do
+      get :index, params: { query_id: "everything" }
+      expect(assigns(:pages)).to contain_exactly(main_page)
+    end
+
+    context "with a name filter" do
+      it "matches sub-pages too" do
+        get :index, params: { query_id: "all", filters: [{ name: { operator: "~", values: ["Deployment"] } }].to_json }
+        expect(assigns(:pages)).to contain_exactly(sub_page)
       end
     end
   end
