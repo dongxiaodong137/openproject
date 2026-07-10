@@ -74,13 +74,16 @@ RSpec.describe Backlogs::WorkPackagesController do
     let(:work_package_in_sprint) { create(:work_package, status:, sprint:, project:) }
     let(:project_id) { project.id }
     let(:id) { work_package_in_sprint.id }
-    let(:target_id) { nil }
+    let(:list_type) { nil }
+    let(:list_id) { nil }
     let(:prev_id) { nil }
+    let(:position) { nil }
     let(:all) { nil }
     let(:direction) { nil }
 
     subject(:response) do
-      put :move, params: { project_id:, id:, target_id:, prev_id:, all:, direction: }, format: :turbo_stream
+      put :move, params: { project_id:, id:, list_type:, list_id:, prev_id:, position:, all:, direction: },
+                 format: :turbo_stream
     end
 
     context "with a Sprint as source" do
@@ -95,7 +98,8 @@ RSpec.describe Backlogs::WorkPackagesController do
       end
 
       context "with the same Sprint as target" do
-        let(:target_id) { "sprint:#{sprint.id}" }
+        let(:list_type) { "sprint" }
+        let(:list_id) { sprint.id }
 
         it "replaces the sprint component once and emits no flash", :aggregate_failures do
           expect(response).to be_successful
@@ -114,7 +118,8 @@ RSpec.describe Backlogs::WorkPackagesController do
 
       context "with another Sprint as target" do
         let(:other_sprint) { create(:sprint, name: "Agile Sprint 2", project:) }
-        let(:target_id) { "sprint:#{other_sprint.id}" }
+        let(:list_type) { "sprint" }
+        let(:list_id) { other_sprint.id }
 
         it "responds with success and moves work_package to another Sprint", :aggregate_failures do
           expect(response).to be_successful
@@ -132,9 +137,23 @@ RSpec.describe Backlogs::WorkPackagesController do
         end
       end
 
+      context "with a blank prev_id (move to the top of the target list)" do
+        let(:other_sprint) { create(:sprint, name: "Agile Sprint 2", project:) }
+        let!(:existing_target_items) { create_list(:work_package, 2, project:, status:, sprint: other_sprint) }
+        let(:list_type) { "sprint" }
+        let(:list_id) { other_sprint.id }
+        let(:prev_id) { "" }
+
+        it "moves the work_package to the first position" do
+          subject
+
+          expect(work_package_in_sprint.reload).to have_attributes(sprint: other_sprint, position: 1)
+        end
+      end
+
       context "with Inbox as target" do
         let!(:existing_inbox_item) { create(:work_package, project:, status:, position: 1) }
-        let(:target_id) { "inbox" }
+        let(:list_type) { "inbox" }
         let(:prev_id) { existing_inbox_item.id }
 
         it "replaces the sprint and backlog components without a flash", :aggregate_failures do
@@ -167,12 +186,24 @@ RSpec.describe Backlogs::WorkPackagesController do
 
           expect(work_package_in_sprint.reload).to have_attributes(sprint_id: nil, backlog_bucket_id: nil, position: 2)
         end
+
+        context "with a position instead of prev_id" do
+          let(:prev_id) { nil }
+          let(:position) { "1" }
+
+          it "moves the work_package to the requested position" do
+            subject
+
+            expect(work_package_in_sprint.reload).to have_attributes(sprint_id: nil, backlog_bucket_id: nil, position: 1)
+          end
+        end
       end
 
       context "with a Backlog bucket as target" do
         let(:bucket) { create(:backlog_bucket, name: "My Bucket", project:) }
         let!(:bucket_items) { create_list(:work_package, 2, project:, status:, backlog_bucket: bucket) }
-        let(:target_id) { "backlog_bucket:#{bucket.id}" }
+        let(:list_type) { "backlog_bucket" }
+        let(:list_id) { bucket.id }
         let(:prev_id) { bucket_items.first.id }
 
         it "replaces the sprint and backlog components without a flash", :aggregate_failures do
@@ -244,7 +275,8 @@ RSpec.describe Backlogs::WorkPackagesController do
 
       context "with a Sprint as target" do
         let(:target_sprint) { create(:sprint, name: "Target Sprint", project:) }
-        let(:target_id) { "sprint:#{target_sprint.id}" }
+        let(:list_type) { "sprint" }
+        let(:list_id) { target_sprint.id }
 
         it "replaces inbox and target sprint components without a flash", :aggregate_failures do
           expect(response).to be_successful
@@ -263,7 +295,7 @@ RSpec.describe Backlogs::WorkPackagesController do
 
       context "with the same Inbox as target" do
         let!(:inbox_items) { create_list(:work_package, 5, project:, status:) }
-        let(:target_id) { "inbox" }
+        let(:list_type) { "inbox" }
         let(:prev_id) { inbox_items.first.id }
 
         it "replaces only the inbox component without a flash", :aggregate_failures do
@@ -283,7 +315,8 @@ RSpec.describe Backlogs::WorkPackagesController do
       context "with a Backlog bucket as target" do
         let(:bucket) { create(:backlog_bucket, project:) }
         let!(:bucket_items) { create_list(:work_package, 2, project:, status:, backlog_bucket: bucket) }
-        let(:target_id) { "backlog_bucket:#{bucket.id}" }
+        let(:list_type) { "backlog_bucket" }
+        let(:list_id) { bucket.id }
         let(:prev_id) { bucket_items.first.id }
 
         it "replaces only the backlog component without a flash", :aggregate_failures do
@@ -328,7 +361,8 @@ RSpec.describe Backlogs::WorkPackagesController do
 
       context "with a Sprint as target" do
         let(:target_sprint) { create(:sprint, name: "Target Sprint", project:) }
-        let(:target_id) { "sprint:#{target_sprint.id}" }
+        let(:list_type) { "sprint" }
+        let(:list_id) { target_sprint.id }
 
         it "replaces the backlog and sprint components without a flash", :aggregate_failures do
           expect(response).to be_successful
@@ -347,7 +381,7 @@ RSpec.describe Backlogs::WorkPackagesController do
 
       context "with the Inbox as target" do
         let!(:existing_inbox_item) { create(:work_package, project:, status:, position: 1) }
-        let(:target_id) { "inbox" }
+        let(:list_type) { "inbox" }
         let(:prev_id) { existing_inbox_item.id }
 
         it "replaces only the backlog component without a flash", :aggregate_failures do
@@ -365,7 +399,8 @@ RSpec.describe Backlogs::WorkPackagesController do
       end
 
       context "with the same Backlog bucket as target" do
-        let(:target_id) { "backlog_bucket:#{bucket.id}" }
+        let(:list_type) { "backlog_bucket" }
+        let(:list_id) { bucket.id }
         let(:prev_id) { bucket_items.first.id }
 
         it "replaces only the backlog component without a flash", :aggregate_failures do
@@ -385,7 +420,8 @@ RSpec.describe Backlogs::WorkPackagesController do
       context "with another Backlog bucket as target" do
         let(:other_bucket) { create(:backlog_bucket, project:) }
         let!(:other_bucket_items) { create_list(:work_package, 2, project:, status:, backlog_bucket: other_bucket) }
-        let(:target_id) { "backlog_bucket:#{other_bucket.id}" }
+        let(:list_type) { "backlog_bucket" }
+        let(:list_id) { other_bucket.id }
         let(:prev_id) { other_bucket_items.first.id }
 
         it "replaces only the backlog component without a flash", :aggregate_failures do
@@ -422,7 +458,8 @@ RSpec.describe Backlogs::WorkPackagesController do
 
     context "when service call fails" do
       let(:other_sprint) { create(:sprint, name: "Agile Sprint 2", project:) }
-      let(:target_id) { "sprint:#{other_sprint.id}" }
+      let(:list_type) { "sprint" }
+      let(:list_id) { other_sprint.id }
       let(:service_result) { ServiceResult.failure(message: "Something went wrong") }
 
       before do
@@ -654,18 +691,24 @@ RSpec.describe Backlogs::WorkPackagesController do
         expect(response).to have_turbo_stream action: "dialog"
       end
 
-      it "includes the existing sprints in the target_id" do
+      it "includes the existing sprints as list_id options" do
+        subject
+
         displayed_sprints.each do |sprint|
-          expect(body).to include("sprint:#{sprint.id}")
+          expect(body).to include(%(value="#{sprint.id}"))
         end
       end
 
-      it "does not include the current sprints from the target_id" do
-        expect(body).not_to include("sprint:#{sprint.id}")
+      it "does not include the current sprint as a list_id option" do
+        subject
+
+        expect(body).not_to include(%(value="#{sprint.id}"))
       end
 
       it "does not include the other sprint" do
-        expect(body).not_to include("sprint:#{other_sprint.id}")
+        subject
+
+        expect(body).not_to include(%(value="#{other_sprint.id}"))
       end
     end
 
@@ -683,14 +726,18 @@ RSpec.describe Backlogs::WorkPackagesController do
         expect(body).not_to include("sprints")
       end
 
-      it "includes the existing sprints in the target_id" do
+      it "includes the existing sprints as list_id options" do
+        subject
+
         displayed_sprints.each do |sprint|
-          expect(body).to include("sprint:#{sprint.id}")
+          expect(body).to include(%(value="#{sprint.id}"))
         end
       end
 
       it "does not include the other sprint" do
-        expect(body).not_to include("sprint:#{other_sprint.id}")
+        subject
+
+        expect(body).not_to include(%(value="#{other_sprint.id}"))
       end
     end
 
@@ -706,12 +753,14 @@ RSpec.describe Backlogs::WorkPackagesController do
 
       it "includes the available sprints in the dialog" do
         displayed_sprints.each do |sprint|
-          expect(body).to include("sprint:#{sprint.id}")
+          expect(body).to include(%(value="#{sprint.id}"))
         end
       end
 
       it "does not include sprints from other projects" do
-        expect(body).not_to include("sprint:#{other_sprint.id}")
+        subject
+
+        expect(body).not_to include(%(value="#{other_sprint.id}"))
       end
     end
 
@@ -754,14 +803,18 @@ RSpec.describe Backlogs::WorkPackagesController do
         expect(response).to have_turbo_stream action: "dialog"
       end
 
-      it "includes the project buckets in the target_id options" do
+      it "includes the project buckets as list_id options" do
+        subject
+
         displayed_buckets.each do |bucket|
-          expect(body).to include("backlog_bucket:#{bucket.id}")
+          expect(body).to include(%(value="#{bucket.id}"))
         end
       end
 
       it "does not include buckets from other projects" do
-        expect(body).not_to include("backlog_bucket:#{other_bucket.id}")
+        subject
+
+        expect(body).not_to include(%(value="#{other_bucket.id}"))
       end
     end
 
@@ -776,12 +829,14 @@ RSpec.describe Backlogs::WorkPackagesController do
       end
 
       it "excludes the current bucket from the options" do
-        expect(body).not_to include("backlog_bucket:#{current_bucket.id}")
+        subject
+
+        expect(body).not_to include(%(value="#{current_bucket.id}"))
       end
 
       it "includes the other project buckets" do
         displayed_buckets.each do |bucket|
-          expect(body).to include("backlog_bucket:#{bucket.id}")
+          expect(body).to include(%(value="#{bucket.id}"))
         end
       end
     end

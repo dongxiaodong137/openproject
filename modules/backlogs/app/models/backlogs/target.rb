@@ -29,49 +29,58 @@
 #++
 
 module Backlogs
-  # Discriminated union representing a backlog container target.
-  # Serialized format: "sprint:{id}", "backlog_bucket:{id}", or "inbox".
+  # Discriminated union describing where a story lives (or should move to):
+  # a sprint, a backlog bucket, or the inbox. It is the single place that maps
+  # between the +(list_type, list_id)+ wire format used by the move UI and the
+  # +(sprint_id, backlog_bucket_id)+ columns persisted on the work package.
   module Target
     SprintId = Data.define(:id) do
-      def type = :sprint
+      def list_type = "sprint"
 
-      def to_s = "#{type}:#{id}"
+      def list_id = id
 
-      def to_h = { type:, id: }
+      def attributes = { sprint_id: id, backlog_bucket_id: nil }
     end
 
     BucketId = Data.define(:id) do
-      def type = :backlog_bucket
+      def list_type = "backlog_bucket"
 
-      def to_s = "#{type}:#{id}"
+      def list_id = id
 
-      def to_h = { type:, id: }
+      def attributes = { sprint_id: nil, backlog_bucket_id: id }
     end
 
     InboxId = Data.define do
-      def type = :inbox
+      def list_type = "inbox"
 
-      delegate :to_s, to: :type
+      def list_id = nil
 
-      def to_h = { type: }
+      def attributes = { sprint_id: nil, backlog_bucket_id: nil }
     end.new
 
-    def self.for(container)
-      case container
-      when Sprint
-        SprintId[container.id]
-      when BacklogBucket
-        BucketId[container.id]
+    # Encode the current location of a work package.
+    def self.for(work_package)
+      if work_package.backlog_bucket_id
+        BucketId[work_package.backlog_bucket_id]
+      elsif work_package.sprint_id
+        SprintId[work_package.sprint_id]
+      else
+        InboxId
       end
     end
 
-    def self.parse(value)
-      case value.to_s.split(":", 2)
+    # Decode a +(list_type, list_id)+ pair from the move UI. Both arguments are
+    # normalized to strings, so symbol and integer input decode the same way as
+    # the raw params. Returns +nil+ when the combination is invalid (unknown
+    # type, missing/non-numeric id for a sprint or bucket, or an id supplied
+    # for the inbox).
+    def self.from_list(list_type, list_id)
+      case [list_type.to_s, list_id.presence&.to_s]
       in ["sprint", /\A\d+\z/ => id]
         SprintId[id.to_i]
       in ["backlog_bucket", /\A\d+\z/ => id]
         BucketId[id.to_i]
-      in %w[inbox]
+      in ["inbox", nil]
         InboxId
       else
         nil
