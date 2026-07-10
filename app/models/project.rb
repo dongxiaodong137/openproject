@@ -232,7 +232,7 @@ class Project < ApplicationRecord
   end
 
   def wiki
-    super&.enabled and super
+    super&.enabled ? super : nil
   end
 
   def <=>(other)
