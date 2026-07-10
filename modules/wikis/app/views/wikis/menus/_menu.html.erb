@@ -26,8 +26,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 See COPYRIGHT and LICENSE files for more details.
 
 ++#%>
-<%= turbo_frame_tag "wikis_sidemenu",
-                    src: menu_wikis_path(**params.permit(:query_id)),
-                    target: "_top",
-                    data: { turbo: false },
-                    loading: :lazy %>
+<%= render OpenProject::Common::SubmenuComponent.new(
+      sidebar_menu_items: Wikis::Menu.new(params: params.permit(:query_id)).menu_items
+) %>

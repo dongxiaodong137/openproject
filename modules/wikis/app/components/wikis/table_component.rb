@@ -37,14 +37,6 @@ module Wikis
 
     main_column :title
 
-    def sortable?
-      false
-    end
-
-    def has_actions?
-      false
-    end
-
     def mobile_title
       I18n.t("wikis.index.menu_title")
     end

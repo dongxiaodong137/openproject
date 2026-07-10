@@ -28,15 +28,35 @@
 # See COPYRIGHT and LICENSE files for more details.
 #++
 
-module Wikis
-  class MenusController < ApplicationController
-    before_action :require_login
-    no_authorization_required! :show
+require "spec_helper"
 
-    def show
-      @submenu_menu_items = ::Wikis::Menu.new(params:).menu_items
+RSpec.describe Wikis::Menu do
+  def menu_entries(params = {})
+    described_class
+      .new(params: ActionController::Parameters.new(params))
+      .menu_items
+      .first
+      .children
+  end
 
-      render layout: nil
-    end
+  it "renders an entry per static query, linking with its query_id" do
+    entries = menu_entries
+
+    expect(entries.map(&:title)).to eq [I18n.t("wikis.index.queries.main"),
+                                        I18n.t("wikis.index.queries.all")]
+    expect(entries.map(&:href)).to eq ["/wikis?query_id=main",
+                                       "/wikis?query_id=all"]
+  end
+
+  it "selects the main pages entry by default" do
+    expect(menu_entries.map(&:selected)).to eq [true, false]
+  end
+
+  it "selects the all pages entry for query_id=all" do
+    expect(menu_entries(query_id: "all").map(&:selected)).to eq [false, true]
+  end
+
+  it "falls back to the main pages entry for unknown query ids" do
+    expect(menu_entries(query_id: "everything").map(&:selected)).to eq [true, false]
   end
 end

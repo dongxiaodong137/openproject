@@ -65,7 +65,6 @@ module Wikis
         query_class: Queries::Wikis::WikiPages::WikiPageQuery
       ).call(params)
       @query.query_id = params[:query_id]
-      @query
     end
 
     def load_pages
