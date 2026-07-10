@@ -309,15 +309,27 @@ describe('Sortable lists controller', () => {
     await dropCurrentItemOnList(firstSourceItem, targetList);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/projects/demo/backlogs/work_packages/1/move',
+      '/projects/demo/backlogs/work_packages/1/move?optimistic=true',
       expect.objectContaining({ method: 'PUT' }),
     );
   });
 
+  it('flags the move request as optimistic', async () => {
+    const { targetList, firstSourceItem } = renderFixture({
+      moveUrlTemplate: '/projects/demo/backlogs/work_packages/{id}/move',
+    });
+
+    await ctx.nextFrame();
+    await dropCurrentItemOnList(firstSourceItem, targetList);
+
+    const calledUrl = fetchMock.mock.lastCall?.[0] as string;
+    expect(new URL(calledUrl, 'http://localhost').searchParams.get('optimistic')).toBe('true');
+  });
+
   it('ignores the turbo frame query when building the move URL', async () => {
     // The move endpoint does not read filter params, and the active filter is
-    // preserved by the frame reloading its own src. The move URL is therefore
-    // the bare template, even when the frame carries a filtered src.
+    // preserved by the frame reloading its own src. The move URL therefore
+    // carries no frame params, even when the frame has a filtered src.
     fixture.innerHTML = `
       <turbo-frame
         id="backlogs-list"
@@ -345,7 +357,7 @@ describe('Sortable lists controller', () => {
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/projects/demo/backlogs/work_packages/1/move',
+      '/projects/demo/backlogs/work_packages/1/move?optimistic=true',
       expect.objectContaining({ method: 'PUT' }),
     );
   });
@@ -575,5 +587,38 @@ describe('Sortable lists controller', () => {
     expect(listController.root).toBe(rootController);
     expect(itemController.root).toBe(rootController);
     expect(scrollableController.root).toBe(rootController);
+  });
+
+  it('moves an item down through the optimistic path', async () => {
+    const { root, sourceList, firstSourceItem } = renderFixture();
+    await ctx.nextFrame();
+
+    const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+    controller.moveInDirection(firstSourceItem, 'down');
+    await flushPromises();
+
+    // '1' started first; moving down puts it after '2'.
+    expect(itemIds(sourceList)).toEqual(['2', '1', '3']);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const body = fetchMock.mock.lastCall?.[1] as { body:FormData };
+    expect(body.body.get('prev_id')).toBe('2');
+  });
+
+  it('reports move position for gating', async () => {
+    const { root, firstSourceItem } = renderFixture();
+    await ctx.nextFrame();
+    const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+
+    expect(controller.itemMovePosition(firstSourceItem)).toEqual({ isFirst: true, isLast: false });
+  });
+
+  it('reports directional availability for gating', async () => {
+    const { root, firstSourceItem } = renderFixture();
+    await ctx.nextFrame();
+    const controller = ctx.application.getControllerForElementAndIdentifier(root, 'sortable-lists') as SortableListsControllerType;
+
+    // First item: down/bottom available, up/top not.
+    expect(controller.directionalMoveAvailable(firstSourceItem, 'down')).toBe(true);
+    expect(controller.directionalMoveAvailable(firstSourceItem, 'up')).toBe(false);
   });
 });

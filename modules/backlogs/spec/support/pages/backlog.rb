@@ -333,10 +333,12 @@ module Pages
       end
     end
 
-    # The move submenu items (Move up/down/to top/to bottom) all perform a
-    # successful move, which reloads the `backlogs_container` frame. Wait for that
-    # reload so a subsequent drag does not grab a soon-to-be-detached element.
-    def click_in_work_package_move_submenu(work_package, item_name, wait: true, frame_reload: true)
+    # The move submenu items (Move up/down/to top/to bottom) reorder the row
+    # client-side and persist via a background fetch; a same-list move no
+    # longer reloads the `backlogs_container` frame (see
+    # Backlogs::WorkPackagesController#optimistic_same_list_move?). Wait for
+    # the turbo-stream response instead, which still fires either way.
+    def click_in_work_package_move_submenu(work_package, item_name, wait: true, frame_reload: false)
       within_work_package_move_submenu(work_package) do |submenu|
         wait_for_backlogs_turbo_stream(wait:, frame_reload:) do
           submenu.find(:menuitem, text: item_name, visible: :all).click
@@ -346,6 +348,51 @@ module Pages
 
     alias_method :click_in_inbox_move_menu, :click_in_work_package_move_submenu
     alias_method :click_in_sprint_story_move_menu, :click_in_work_package_move_submenu
+
+    # Arms a one-shot listener for `turbo:frame-load` on `#backlogs_container`.
+    # A `reload_frame_via_turbo_stream("backlogs_container")` response (the
+    # non-optimistic move path) fetches and re-renders that frame, firing the
+    # event; an optimistic same-list move never touches the frame, so the
+    # event stays unfired. Call before the action under test, then assert with
+    # +expect_backlogs_container_not_reloaded+.
+    def install_backlogs_container_reload_probe
+      page.execute_script(<<~JS)
+        window.__opBacklogsContainerReloaded = false;
+        document.getElementById('backlogs_container')?.addEventListener(
+          'turbo:frame-load',
+          () => { window.__opBacklogsContainerReloaded = true; },
+          { once: true }
+        );
+      JS
+    end
+
+    # Confirms the probe armed by +install_backlogs_container_reload_probe+
+    # never fired. Unlike the client's DOM reorder (synchronous) or the DB
+    # write (already committed by the time the response is received), a frame
+    # reload is a second, independent round trip with no synchronous signal to
+    # key off of -- so this actively waits up to +wait+ seconds, long enough
+    # for that round trip to finish on a real (non-optimistic) move, before
+    # asserting the probe stayed unset.
+    def expect_backlogs_container_not_reloaded(wait: Capybara.default_max_wait_time)
+      # Capybara caps +evaluate_async_script+ at Capybara.default_max_wait_time
+      # (it sets Selenium's script_timeout to it). The in-page probe below waits
+      # +wait+ seconds before resolving, so give Selenium a strictly larger
+      # budget -- otherwise the two race at the same instant and CI overhead
+      # lands +done+ just past the driver's deadline (ScriptTimeoutError).
+      reloaded = Capybara.using_wait_time(wait + 5) do
+        page.evaluate_async_script(<<~JS, wait * 1000)
+          const [timeoutMs, done] = [arguments[0], arguments[arguments.length - 1]];
+
+          if (window.__opBacklogsContainerReloaded) {
+            done(true);
+          } else {
+            setTimeout(() => done(window.__opBacklogsContainerReloaded === true), timeoutMs);
+          }
+        JS
+      end
+
+      expect(reloaded).to be(false)
+    end
 
     def expect_no_backlog_bucket_menu(bucket)
       within_backlog_bucket(bucket) do
@@ -554,7 +601,7 @@ module Pages
           [find(sprint_selector(into)), nil]
         end
 
-      wait_for_backlogs_turbo_stream(frame_reload: true) do
+      wait_for_backlogs_turbo_stream(frame_reload: cross_list_drag?(moved, before:, after:, into:)) do
         drag_backlogs_item(source: moved_element, target: target_element, edge:)
       end
     rescue Capybara::Cuprite::ObsoleteNode, Selenium::WebDriver::Error::StaleElementReferenceError
@@ -842,6 +889,27 @@ module Pages
       else
         wait_for_turbo_stream(wait:, &)
       end
+    end
+
+    # A same-list reorder (drag within the same sprint/bucket/inbox) is applied
+    # optimistically and never reloads the `backlogs_container` frame (see
+    # Backlogs::WorkPackagesController#optimistic_same_list_move?), so
+    # +drag_work_package+ must not wait for one. An `into:` drop always targets
+    # a different sprint, and a `before:`/`after:` drop may or may not cross
+    # lists (e.g. dragging a bucket item to just before a sprint item), so list
+    # membership is compared directly.
+    def cross_list_drag?(moved, before:, after:, into:)
+      return true if into
+
+      list_identity(moved) != list_identity(before || after)
+    end
+
+    # Reads the passed record's in-memory list. Callers hand in freshly loaded
+    # records right before the drag, so this reflects the pre-drag list. Do not
+    # reuse the same object across two drags without reloading it first, or a
+    # stale identity would misclassify a same-list reorder as cross-list.
+    def list_identity(work_package)
+      [work_package.sprint_id, work_package.backlog_bucket_id]
     end
 
     def install_backlogs_dnd_probe(source:, target:, edge:)

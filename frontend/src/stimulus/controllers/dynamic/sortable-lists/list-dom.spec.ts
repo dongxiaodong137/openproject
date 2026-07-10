@@ -29,6 +29,8 @@
 import {
   captureRowPositions,
   reorderRows,
+  resolveDirectionalPreviousItemId,
+  resolveItemMovePosition,
   resolveListAppendPreviousItemId,
   restoreRowPositions,
   rowOf,
@@ -314,6 +316,99 @@ describe('sortable lists DOM helpers', () => {
       list.append(one);
 
       expect(rowsRemainAt(optimistic)).toBe(false);
+    });
+  });
+});
+
+describe('directional move helpers', () => {
+  function container(ids:string[]):HTMLElement {
+    const ul = document.createElement('ul');
+    ul.innerHTML = ids.map((id) => `<li data-sortable-lists--item-id-value="${id}"></li>`).join('');
+    return ul;
+  }
+  const itemAt = (ul:HTMLElement, index:number) => ul.children[index] as HTMLElement;
+
+  it('reports first/last position', () => {
+    const ul = container(['1', '2', '3']);
+    expect(resolveItemMovePosition({ itemElement: itemAt(ul, 0), rowsContainer: ul })).toEqual({ isFirst: true, isLast: false });
+    expect(resolveItemMovePosition({ itemElement: itemAt(ul, 1), rowsContainer: ul })).toEqual({ isFirst: false, isLast: false });
+    expect(resolveItemMovePosition({ itemElement: itemAt(ul, 2), rowsContainer: ul })).toEqual({ isFirst: false, isLast: true });
+  });
+
+  it('returns null when the item is not in the container', () => {
+    const ul = container(['1']);
+    const stray = document.createElement('li');
+    expect(resolveItemMovePosition({ itemElement: stray, rowsContainer: ul })).toBeNull();
+  });
+
+  it('maps each direction to a previous item id', () => {
+    const ul = container(['1', '2', '3', '4']);
+    const at = (i:number) => ({ itemElement: itemAt(ul, i), rowsContainer: ul });
+    // item '3' (index 2)
+    expect(resolveDirectionalPreviousItemId({ ...at(2), direction: 'top' })).toBeNull();
+    expect(resolveDirectionalPreviousItemId({ ...at(2), direction: 'up' })).toBe('1');
+    expect(resolveDirectionalPreviousItemId({ ...at(2), direction: 'down' })).toBe('4');
+    expect(resolveDirectionalPreviousItemId({ ...at(2), direction: 'bottom' })).toBe('4');
+    // second item moving up lands at the top
+    expect(resolveDirectionalPreviousItemId({ ...at(1), direction: 'up' })).toBeNull();
+  });
+
+  it('returns undefined when the direction is unavailable', () => {
+    const ul = container(['1', '2']);
+    const first = { itemElement: itemAt(ul, 0), rowsContainer: ul };
+    const last = { itemElement: itemAt(ul, 1), rowsContainer: ul };
+    expect(resolveDirectionalPreviousItemId({ ...first, direction: 'top' })).toBeUndefined();
+    expect(resolveDirectionalPreviousItemId({ ...first, direction: 'up' })).toBeUndefined();
+    expect(resolveDirectionalPreviousItemId({ ...last, direction: 'down' })).toBeUndefined();
+    expect(resolveDirectionalPreviousItemId({ ...last, direction: 'bottom' })).toBeUndefined();
+  });
+
+  describe('across a truncation marker (sparse list: head + hidden block + tail)', () => {
+    // Rows: h1, h2, <marker prev=last-hidden>, t1, t2. The marker stands in for
+    // a block of hidden work packages the client cannot address one item at a
+    // time.
+    function truncatedContainer():HTMLElement {
+      const ul = document.createElement('ul');
+      ul.innerHTML = [
+        '<li data-sortable-lists--item-id-value="h1"></li>',
+        '<li data-sortable-lists--item-id-value="h2"></li>',
+        '<li data-sortable-lists-prev-item-id="last-hidden"></li>',
+        '<li data-sortable-lists--item-id-value="t1"></li>',
+        '<li data-sortable-lists--item-id-value="t2"></li>',
+      ].join('');
+      return ul;
+    }
+    const byId = (ul:HTMLElement, id:string) =>
+      ul.querySelector<HTMLElement>(`[data-sortable-lists--item-id-value="${id}"]`)!;
+    const at = (ul:HTMLElement, id:string) => ({ itemElement: byId(ul, id), rowsContainer: ul });
+
+    it('disables a one-step move that would cross the hidden block', () => {
+      const ul = truncatedContainer();
+      // "down" from the last head item and "up" from the first tail item would
+      // jump the whole hidden block, so they are unavailable.
+      expect(resolveDirectionalPreviousItemId({ ...at(ul, 'h2'), direction: 'down' })).toBeUndefined();
+      expect(resolveDirectionalPreviousItemId({ ...at(ul, 't1'), direction: 'up' })).toBeUndefined();
+    });
+
+    it('keeps one-step moves within a visible chunk', () => {
+      const ul = truncatedContainer();
+      expect(resolveDirectionalPreviousItemId({ ...at(ul, 'h1'), direction: 'down' })).toBe('h2');
+      expect(resolveDirectionalPreviousItemId({ ...at(ul, 'h2'), direction: 'up' })).toBeNull();
+      expect(resolveDirectionalPreviousItemId({ ...at(ul, 't1'), direction: 'down' })).toBe('t2');
+    });
+
+    it('anchors a tail item stepping up onto the hidden block via the marker id', () => {
+      const ul = truncatedContainer();
+      // t2 up one slot lands just after the hidden block, before t1.
+      expect(resolveDirectionalPreviousItemId({ ...at(ul, 't2'), direction: 'up' })).toBe('last-hidden');
+    });
+
+    it('still allows the addressable extremes across the block', () => {
+      const ul = truncatedContainer();
+      expect(resolveDirectionalPreviousItemId({ ...at(ul, 'h1'), direction: 'top' })).toBeUndefined();
+      expect(resolveDirectionalPreviousItemId({ ...at(ul, 'h1'), direction: 'bottom' })).toBe('t2');
+      expect(resolveDirectionalPreviousItemId({ ...at(ul, 't2'), direction: 'top' })).toBeNull();
+      expect(resolveDirectionalPreviousItemId({ ...at(ul, 't2'), direction: 'bottom' })).toBeUndefined();
     });
   });
 });
