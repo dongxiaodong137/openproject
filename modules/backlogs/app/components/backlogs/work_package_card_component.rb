@@ -30,9 +30,20 @@
 
 module Backlogs
   class WorkPackageCardComponent < ApplicationComponent
+    # Prefix added to a work package's dom_id to build its card turbo-frame
+    # id. Shared with WorkPackageCardListItemLoadingComponent so the lazily
+    # loaded placeholder and the rendered card target the same frame.
+    FRAME_ID_PREFIX = "card"
+
     attr_reader :work_package, :menu_src
 
     delegate :with_menu, :with_metric, to: :card
+
+    # @param work_package [WorkPackage] the work package the frame wraps.
+    # @return [String] the turbo-frame id for that work package's card.
+    def self.frame_id(work_package)
+      ActionView::RecordIdentifier.dom_id(work_package, FRAME_ID_PREFIX)
+    end
 
     def initialize(work_package:, menu_src: nil)
       super()
@@ -42,13 +53,24 @@ module Backlogs
     end
 
     def call
-      render(card) do |common_card|
+      card_html = render(card) do |common_card|
         unless common_card.metric?
           common_card.with_metric do
             render(Backlogs::StoryPointsComponent.new(work_package:))
           end
         end
       end
+
+      return card_html unless OpenProject::FeatureDecisions.backlogs_lazy_cards_active?
+
+      # With lazy cards enabled the card is wrapped in a turbo-frame so the
+      # placeholder rendered by WorkPackageCardListItemLoadingComponent is
+      # replaced once the controller response arrives.
+      helpers.turbo_frame_tag(card_frame_id) { card_html }
+    end
+
+    def card_frame_id
+      self.class.frame_id(work_package)
     end
 
     private

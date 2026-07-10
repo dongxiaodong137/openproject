@@ -30,7 +30,7 @@
 
 require "rails_helper"
 
-RSpec.describe Backlogs::SprintComponent, type: :component do
+RSpec.describe Backlogs::SprintComponent, type: :component, with_flag: { backlogs_lazy_cards: true } do
   include Rails.application.routes.url_helpers
 
   shared_let(:type_feature) { create(:type_feature) }
@@ -88,17 +88,28 @@ RSpec.describe Backlogs::SprintComponent, type: :component do
         )
       end
 
-      it "renders story points on each work package card" do
-        expect(rendered_component).to have_css("span", text: "5", aria: { hidden: true })
-        expect(rendered_component).to have_css(".sr-only", text: "5 story points")
-        expect(rendered_component).to have_css("span", text: "3", aria: { hidden: true })
-        expect(rendered_component).to have_css(".sr-only", text: "3 story points")
+      it "lazily loads each work package card through a turbo-frame" do
+        [work_package1, work_package2].each do |work_package|
+          expect(rendered_component).to have_css(
+            ".Box-row#work_package_#{work_package.id} " \
+            "turbo-frame#card_work_package_#{work_package.id}[loading='lazy']" \
+            "[src*='#{project_backlogs_work_package_card_path(project, work_package)}']"
+          )
+        end
+      end
+
+      context "when the backlogs_lazy_cards feature is disabled", with_flag: { backlogs_lazy_cards: false } do
+        it "renders the cards inline without turbo-frames" do
+          [work_package1, work_package2].each do |work_package|
+            expect(rendered_component).to have_no_css("turbo-frame#work_package_#{work_package.id}_card")
+          end
+          expect(rendered_component).to have_css(".sr-only", text: "5 story points")
+          expect(rendered_component).to have_css(".sr-only", text: "3 story points")
+        end
       end
 
       it "renders one Box-row per work package" do
         expect(rendered_component).to have_css(".Box-row", count: 2)
-        expect(rendered_component).to have_text(work_package1.subject)
-        expect(rendered_component).to have_text(work_package2.subject)
       end
 
       it "wires drop-target data attributes for the sprint" do

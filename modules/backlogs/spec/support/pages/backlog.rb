@@ -305,6 +305,14 @@ module Pages
 
     def within_work_package_menu(work_package, &)
       within_work_package(work_package) do
+        # With lazy cards enabled the card is a turbo-frame that reloads whenever
+        # the board is morphed (e.g. after reordering). Wait for it to settle
+        # before opening the menu, otherwise clicking the actions button races
+        # the frame swap and the menu never opens. There is no such frame when
+        # cards are rendered inline.
+        if OpenProject::FeatureDecisions.backlogs_lazy_cards_active?
+          expect(page).to have_css("turbo-frame#card_work_package_#{work_package.id}[complete]:not([busy])")
+        end
         button = find(:button, accessible_name: "Work package actions")
         within(open_controlled_menu(button), &)
       end
@@ -328,8 +336,13 @@ module Pages
 
     def click_in_work_package_move_submenu(work_package, item_name, wait: true)
       within_work_package_move_submenu(work_package) do |submenu|
-        wait_for_turbo_stream(wait:) do
-          submenu.find(:menuitem, text: item_name).click
+        # Moving reloads the backlogs_container frame, whose morph in turn
+        # reloads the affected card frames. Wait for that frame reload (not just
+        # the turbo stream) so a following interaction does not race the swap.
+        wait_for_turbo_frame(wait:) do
+          wait_for_turbo_stream(wait:) do
+            submenu.find(:menuitem, text: item_name).click
+          end
         end
       end
     end
