@@ -101,14 +101,15 @@ class Queries::WorkPackages::Selects::PropertySelect < Queries::WorkPackages::Se
       groupable: "#{WorkPackage.table_name}.category_id"
     },
     version: {
+      if: -> { !Setting::WorkPackageMultipleVersions.active? },
       association: "version",
       sortable: "name",
       groupable: "#{WorkPackage.table_name}.version_id"
     },
     target_versions: {
-      # version will be replaced by target_versions but during the transition
-      # we exclude target_versions from user-facing work package selects
-      if: -> { false }
+      # Sorting and grouping by target_versions comes with COMMS-855.
+      if: -> { Setting::WorkPackageMultipleVersions.active? },
+      association: "target_versions"
     },
     start_date: {
       sortable: "#{WorkPackage.table_name}.start_date"
